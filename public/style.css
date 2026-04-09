@@ -1,0 +1,186 @@
+/* ── Base ──────────────────────────────────────────────────────── */
+[data-bs-theme="dark"] {
+  --bs-body-bg: #0d1117;
+  --bs-body-color: #e6edf3;
+}
+
+body {
+  min-height: 100vh;
+  background-color: #0d1117;
+}
+
+/* ── Cards ─────────────────────────────────────────────────────── */
+.card {
+  background-color: #161b22;
+  border-color: #30363d !important;
+}
+
+.card-header,
+.card-footer {
+  background-color: rgba(255, 255, 255, 0.03);
+  border-color: #30363d !important;
+}
+
+/* ── Navbar ────────────────────────────────────────────────────── */
+.navbar {
+  height: 56px;
+  background-color: #161b22 !important;
+  border-bottom-color: #30363d !important;
+}
+
+.navbar-brand {
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+/* ── Table ─────────────────────────────────────────────────────── */
+.table-dark {
+  --bs-table-bg: transparent;
+  --bs-table-hover-bg: rgba(255, 255, 255, 0.04);
+  --bs-table-border-color: #30363d;
+}
+
+.table th {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.table td {
+  vertical-align: middle;
+}
+
+/* ── Forms ─────────────────────────────────────────────────────── */
+.form-control,
+.form-select,
+.input-group-text {
+  background-color: #0d1117;
+  border-color: #30363d;
+  color: #e6edf3;
+}
+
+.form-control:focus,
+.form-select:focus {
+  background-color: #0d1117;
+  border-color: #388bfd;
+  color: #e6edf3;
+  box-shadow: 0 0 0 3px rgba(56, 139, 253, 0.2);
+}
+
+.form-control::placeholder {
+  color: #484f58;
+}
+
+.form-control:disabled,
+.form-control[readonly] {
+  background-color: #161b22;
+  color: #484f58;
+}
+
+.form-select option {
+  background-color: #161b22;
+}
+
+textarea.form-control {
+  resize: vertical;
+}
+
+/* ── Buttons ───────────────────────────────────────────────────── */
+.btn-primary {
+  --bs-btn-bg: #238636;
+  --bs-btn-border-color: #238636;
+  --bs-btn-hover-bg: #2ea043;
+  --bs-btn-hover-border-color: #2ea043;
+  --bs-btn-active-bg: #1a7f37;
+}
+
+/* ── Badge ─────────────────────────────────────────────────────── */
+.badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+/* ── Image gallery ─────────────────────────────────────────────── */
+.img-thumb-wrap {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+}
+
+.img-thumb-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #30363d;
+}
+
+.img-thumb-wrap .remove-btn {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+  line-height: 1;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.img-thumb-wrap:hover .remove-btn {
+  opacity: 1;
+}
+
+/* ── Login ─────────────────────────────────────────────────────── */
+.login-card {
+  width: 360px;
+  border-color: #30363d !important;
+}
+
+/* ── Monospace ─────────────────────────────────────────────────── */
+.font-monospace {
+  font-size: 0.8em;
+}
+
+/* ── Toasts ────────────────────────────────────────────────────── */
+.toast {
+  background-color: #21262d;
+  border-color: #30363d;
+}
+
+/* ── Modals ────────────────────────────────────────────────────── */
+.modal-content {
+  background-color: #161b22;
+  border-color: #30363d;
+}
+
+.modal-header,
+.modal-footer {
+  border-color: #30363d !important;
+}
+
+/* ── Spinner page loader ────────────────────────────────────────── */
+.page-loader {
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Responsive tweaks ─────────────────────────────────────────── */
+@media (max-width: 576px) {
+  .table th:nth-child(4),
+  .table td:nth-child(4),
+  .table th:nth-child(5),
+  .table td:nth-child(5) {
+    display: none;
+  }
+}
