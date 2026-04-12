@@ -1,5 +1,5 @@
 /* =============================================================
-   Ecommaxxing Admin Dashboard
+   Blackstar Admin Dashboard
    ============================================================= */
 'use strict';
 
@@ -16,7 +16,7 @@ const Config = {
 
 // ── Auth ────────────────────────────────────────────────────────
 const Auth = {
-  _key: 'ecommaxxing_admin_token',
+  _key: 'blackstar_admin_token',
   getToken()   { return sessionStorage.getItem(this._key); },
   setToken(t)  { sessionStorage.setItem(this._key, t); },
   clearToken() { sessionStorage.removeItem(this._key); },
@@ -248,31 +248,38 @@ function confirmModal(title, bodyHtml, btnLabel = 'Delete', btnClass = 'btn-dang
 }
 
 // ── Shared navbar ───────────────────────────────────────────────
+const STAR_SVG = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">
+  <path d="M12 2L14.6 8.73L22 9.27L16.8 13.87L18.47 21.02L12 17.27L5.53 21.02L7.2 13.87L2 9.27L9.4 8.73L12 2Z" fill="#C9A227"/>
+</svg>`;
+
 function renderNavbar() {
-  const hash      = location.hash.replace(/^#/, '');
-  const onOrders  = hash.startsWith('/orders');
+  const hash       = location.hash.replace(/^#/, '');
+  const onOrders   = hash.startsWith('/orders');
   const onProducts = !onOrders;
   return `
-    <nav class="navbar navbar-expand-lg border-bottom">
-      <div class="container-fluid">
+    <nav class="navbar border-bottom">
+      <div class="container-fluid d-flex align-items-center justify-content-between" style="height:56px">
         <a class="navbar-brand" href="#/products">
-          <i class="bi bi-bag-check-fill text-success me-2"></i>Ecommaxxing
+          ${STAR_SVG}
+          <span class="brand-full">BLACKSTAR</span>
+          <span class="brand-short" style="display:none">BSA</span>
+          <span class="brand-sub d-none d-md-inline ms-1">ADMIN</span>
         </a>
-        <div class="d-flex align-items-center gap-2 gap-sm-3">
-          <ul class="nav nav-pills nav-sm d-flex gap-1 mb-0">
+        <div class="d-flex align-items-center gap-2">
+          <ul class="nav nav-pills d-flex gap-1 mb-0">
             <li class="nav-item">
-              <a class="nav-link py-1 px-2 small ${onProducts ? 'active' : ''}" href="#/products">
-                <i class="bi bi-box-seam me-1"></i>Products
+              <a class="nav-link py-1 px-2 ${onProducts ? 'active' : ''}" href="#/products">
+                <i class="bi bi-box-seam"></i><span class="nav-label ms-1">Products</span>
               </a>
             </li>
             <li class="nav-item">
-              <a class="nav-link py-1 px-2 small ${onOrders ? 'active' : ''}" href="#/orders">
-                <i class="bi bi-receipt me-1"></i>Orders
+              <a class="nav-link py-1 px-2 ${onOrders ? 'active' : ''}" href="#/orders">
+                <i class="bi bi-receipt"></i><span class="nav-label ms-1">Orders</span>
               </a>
             </li>
           </ul>
           <button class="btn btn-outline-secondary btn-sm" id="logout-btn">
-            <i class="bi bi-box-arrow-right me-1"></i><span class="d-none d-sm-inline">Logout</span>
+            <i class="bi bi-box-arrow-right"></i><span class="d-none d-sm-inline ms-1">Logout</span>
           </button>
         </div>
       </div>
@@ -285,13 +292,18 @@ function renderNavbar() {
 const LoginView = {
   render() {
     return `
-      <div class="min-vh-100 d-flex align-items-center justify-content-center">
+      <div class="login-wrap">
         <div class="card login-card">
-          <div class="card-body p-4">
+          <div class="card-body p-4 p-sm-5">
             <div class="text-center mb-4">
-              <i class="bi bi-bag-check-fill text-success" style="font-size:2.5rem"></i>
-              <h4 class="mt-2 fw-bold mb-0">Ecommaxxing Admin</h4>
-              <p class="text-secondary small mt-1">Sign in to continue</p>
+              <div class="login-logo">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 2L14.6 8.73L22 9.27L16.8 13.87L18.47 21.02L12 17.27L5.53 21.02L7.2 13.87L2 9.27L9.4 8.73L12 2Z" fill="#C9A227"/>
+                </svg>
+              </div>
+              <h4 class="fw-black mb-0" style="letter-spacing:0.1em;text-transform:uppercase;font-size:1.1rem">Blackstar</h4>
+              <p class="mb-0" style="font-size:0.65rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--text-muted)">Admin Panel</p>
+              <p class="text-secondary small mt-3 mb-0">Sign in to continue</p>
             </div>
             <div id="login-error" class="alert alert-danger d-none py-2 small" role="alert"></div>
             <form id="login-form" novalidate>
@@ -349,10 +361,10 @@ const ProductsListView = {
     return `
       ${renderNavbar()}
       <div class="container-fluid py-4">
-        <div class="d-flex justify-content-between align-items-start mb-4 gap-3 flex-wrap">
+        <div class="d-flex justify-content-between align-items-center mb-4 gap-3 flex-wrap">
           <div>
-            <h2 class="fw-bold mb-0">Products</h2>
-            <p class="text-secondary small mb-0">Manage your product catalog</p>
+            <h1 class="fw-black mb-0" style="font-size:1.4rem;letter-spacing:-0.01em">Products</h1>
+            <p class="mb-0 mt-1" style="font-size:0.75rem;color:var(--text-muted)">Manage your catalog</p>
           </div>
           <a href="#/products/new" class="btn btn-primary">
             <i class="bi bi-plus-lg me-1"></i>New Product
@@ -373,15 +385,15 @@ const ProductsListView = {
           </div>
 
           <div class="table-responsive">
-            <table class="table table-dark table-hover align-middle mb-0">
+            <table class="table table-dark table-hover align-middle mb-0 products-table">
               <thead>
                 <tr>
-                  <th class="ps-3 text-uppercase text-secondary small">Product</th>
-                  <th class="text-uppercase text-secondary small">Price</th>
-                  <th class="text-uppercase text-secondary small">Stock</th>
-                  <th class="text-uppercase text-secondary small">Status</th>
-                  <th class="text-uppercase text-secondary small">Created</th>
-                  <th class="pe-3 text-uppercase text-secondary small">Actions</th>
+                  <th class="ps-3">Product</th>
+                  <th>Price</th>
+                  <th>Stock</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th class="pe-3">Actions</th>
                 </tr>
               </thead>
               <tbody id="products-tbody">
@@ -611,9 +623,9 @@ const ProductFormView = {
           <a href="#/products" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-arrow-left me-1"></i>Back
           </a>
-          <h2 class="fw-bold mb-0" id="form-title">
-            ${this._isNew ? 'New Product' : '<span class="text-secondary">Loading…</span>'}
-          </h2>
+          <h1 class="fw-black mb-0" id="form-title" style="font-size:1.3rem;letter-spacing:-0.01em">
+            ${this._isNew ? 'New Product' : '<span style="color:var(--text-muted)">Loading…</span>'}
+          </h1>
         </div>
 
         <!-- Loading state (edit only) -->
@@ -1144,10 +1156,10 @@ const OrdersListView = {
     return `
       ${renderNavbar()}
       <div class="container-fluid py-4">
-        <div class="d-flex justify-content-between align-items-start mb-4 gap-3 flex-wrap">
+        <div class="d-flex justify-content-between align-items-center mb-4 gap-3 flex-wrap">
           <div>
-            <h2 class="fw-bold mb-0">Orders</h2>
-            <p class="text-secondary small mb-0">Manage and fulfill customer orders</p>
+            <h1 class="fw-black mb-0" style="font-size:1.4rem;letter-spacing:-0.01em">Orders</h1>
+            <p class="mb-0 mt-1" style="font-size:0.75rem;color:var(--text-muted)">Manage and fulfill customer orders</p>
           </div>
         </div>
 
@@ -1190,17 +1202,17 @@ const OrdersListView = {
           </div>
 
           <div class="table-responsive">
-            <table class="table table-dark table-hover align-middle mb-0">
+            <table class="table table-dark table-hover align-middle mb-0 orders-table">
               <thead>
                 <tr>
-                  <th class="ps-3 text-uppercase text-secondary small">Order</th>
-                  <th class="text-uppercase text-secondary small">Customer</th>
-                  <th class="text-uppercase text-secondary small d-none d-md-table-cell">Items</th>
-                  <th class="text-uppercase text-secondary small">Total</th>
-                  <th class="text-uppercase text-secondary small">Payment</th>
-                  <th class="text-uppercase text-secondary small">Fulfillment</th>
-                  <th class="text-uppercase text-secondary small d-none d-md-table-cell">Date</th>
-                  <th class="pe-3 text-uppercase text-secondary small"></th>
+                  <th class="ps-3">Order</th>
+                  <th>Customer</th>
+                  <th class="d-none d-md-table-cell">Items</th>
+                  <th>Total</th>
+                  <th>Payment</th>
+                  <th>Fulfillment</th>
+                  <th class="d-none d-md-table-cell">Date</th>
+                  <th class="pe-3"></th>
                 </tr>
               </thead>
               <tbody id="orders-tbody">
@@ -1376,9 +1388,9 @@ const OrderDetailView = {
           <a href="#/orders" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-arrow-left me-1"></i>Orders
           </a>
-          <h2 class="fw-bold mb-0" id="order-title">
-            <span class="text-secondary">Loading…</span>
-          </h2>
+          <h1 class="fw-black mb-0" id="order-title" style="font-size:1.3rem;letter-spacing:-0.01em">
+            <span style="color:var(--text-muted)">Loading…</span>
+          </h1>
         </div>
         <div id="order-loader" class="page-loader">
           <div class="spinner-border text-success"></div>
@@ -1827,8 +1839,9 @@ const Router = {
 
     app.innerHTML = `
       <div class="text-center py-5">
-        <h3 class="text-secondary">404 — Page not found</h3>
-        <a href="#/products" class="btn btn-primary mt-3">Go to products</a>
+        <div style="font-size:3rem;margin-bottom:1rem">★</div>
+        <h3 style="color:var(--text-muted)">404 — Page not found</h3>
+        <a href="#/products" class="btn btn-primary mt-3">Go to Products</a>
       </div>`;
   },
 };
@@ -1849,7 +1862,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           <h5 class="fw-bold">Configuration Error</h5>
           <p class="mb-1">${escHtml(err.message)}</p>
           <p class="text-secondary small mb-0">
-            Set the <code>WORKER_URL</code> environment variable to your Cloudflare Worker URL and redeploy.
+            Set the <code>WORKER_URL</code> environment variable and redeploy.
           </p>
         </div>
       </div>`;
