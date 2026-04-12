@@ -590,9 +590,10 @@ const ProductsListView = {
 // View: Product Form (create + edit)
 // ═══════════════════════════════════════════════════════════════
 const ProductFormView = {
-  _id:      null,
-  _isNew:   false,
-  _images:  [], // [{ url, key? }]
+  _id:       null,
+  _isNew:    false,
+  _images:   [], // [{ url, key? }]
+  _variants: [], // [{ size, stock }]
 
   render(id) {
     this._id     = id ?? null;
@@ -710,7 +711,41 @@ const ProductFormView = {
             </div>
           </div>
 
-          <!-- Metadata card -->
+          <!-- Variants / Sizes card -->
+          <div class="card mb-4">
+            <div class="card-header small fw-semibold text-uppercase text-secondary d-flex justify-content-between">
+              Variants / Sizes
+              <span class="fw-normal text-secondary">Size and stock combinations</span>
+            </div>
+            <div class="card-body">
+              <div id="variants-container">
+                <div class="table-responsive">
+                  <table class="table table-sm table-borderless mb-3">
+                    <thead>
+                      <tr class="border-bottom">
+                        <th class="text-secondary small fw-semibold">Size</th>
+                        <th class="text-secondary small fw-semibold">Stock</th>
+                        <th class="text-secondary small fw-semibold"></th>
+                      </tr>
+                    </thead>
+                    <tbody id="variants-list">
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="add-variant-btn">
+                <i class="bi bi-plus-lg me-1"></i>Add Size
+              </button>
+              <div class="form-text mt-3">Common sizes: S, M, L, XL. Or use custom sizes like "One Size", "32x24", etc.</div>
+              <div class="mt-3 p-3 bg-dark rounded-2 border border-secondary small">
+                <div class="text-secondary mb-2">JSON Preview:</div>
+                <code id="variants-preview" class="text-success font-monospace">{ "variants": [] }</code>
+              </div>
+              <div class="invalid-feedback d-block d-none small mt-2" id="variants-error"></div>
+            </div>
+          </div>
+
+          <!-- Metadata card (legacy) -->
           <div class="card mb-4">
             <div class="card-header small fw-semibold text-uppercase text-secondary d-flex justify-content-between">
               Metadata
@@ -800,6 +835,13 @@ const ProductFormView = {
       }
     });
 
+    // Variants / Sizes
+    document.getElementById('add-variant-btn').addEventListener('click', e => {
+      e.preventDefault();
+      this._addVariant();
+    });
+    this._renderVariants();
+
     // Load product data when editing
     if (!this._isNew) {
       try {
@@ -848,8 +890,24 @@ const ProductFormView = {
 
     document.getElementById('active-toggle').checked = p.active !== false;
 
+    // Variants / Sizes
+    if (p.metadata && p.metadata.variants && Array.isArray(p.metadata.variants)) {
+      this._variants = p.metadata.variants.map(v => ({
+        size: v.size ?? '',
+        stock: v.stock ?? 0
+      }));
+    } else {
+      this._variants = [];
+    }
+    this._renderVariants();
+
+    // Metadata (legacy, excluding variants)
     if (p.metadata && Object.keys(p.metadata).length > 0) {
-      document.getElementById('metadata-input').value = JSON.stringify(p.metadata, null, 2);
+      const metaCopy = { ...p.metadata };
+      delete metaCopy.variants;
+      if (Object.keys(metaCopy).length > 0) {
+        document.getElementById('metadata-input').value = JSON.stringify(metaCopy, null, 2);
+      }
     }
 
     // Stripe fields (read-only)
@@ -888,8 +946,89 @@ const ProductFormView = {
     });
   },
 
+  _renderVariants() {
+    const list = document.getElementById('variants-list');
+    if (!list) return;
+
+    list.innerHTML = this._variants.map((variant, i) => `
+      <tr class="border-bottom">
+        <td class="py-2">
+          <input type="text" class="form-control form-control-sm" placeholder="e.g., S, M, L, XL"
+                 value="${escHtml(variant.size)}" data-variant-size="${i}">
+        </td>
+        <td class="py-2">
+          <input type="number" class="form-control form-control-sm" placeholder="0" min="0"
+                 value="${variant.stock}" data-variant-stock="${i}">
+        </td>
+        <td class="py-2 text-end">
+          <button type="button" class="btn btn-sm btn-danger" data-remove-variant="${i}" title="Remove">
+            <i class="bi bi-trash"></i>
+          </button>
+        </td>
+      </tr>`).join('');
+
+    // Attach input listeners
+    list.querySelectorAll('[data-variant-size]').forEach(input => {
+      input.addEventListener('change', e => {
+        const idx = parseInt(e.target.dataset.variantSize);
+        this._variants[idx].size = e.target.value.trim();
+        this._updateVariantsPreview();
+      });
+      input.addEventListener('input', e => {
+        const idx = parseInt(e.target.dataset.variantSize);
+        this._variants[idx].size = e.target.value.trim();
+        this._updateVariantsPreview();
+      });
+    });
+
+    list.querySelectorAll('[data-variant-stock]').forEach(input => {
+      input.addEventListener('change', e => {
+        const idx = parseInt(e.target.dataset.variantStock);
+        const stock = parseInt(e.target.value, 10) || 0;
+        this._variants[idx].stock = Math.max(0, stock);
+        e.target.value = this._variants[idx].stock;
+        this._updateVariantsPreview();
+      });
+      input.addEventListener('input', e => {
+        const idx = parseInt(e.target.dataset.variantStock);
+        const stock = parseInt(e.target.value, 10) || 0;
+        this._variants[idx].stock = Math.max(0, stock);
+        this._updateVariantsPreview();
+      });
+    });
+
+    list.querySelectorAll('[data-remove-variant]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.preventDefault();
+        const idx = parseInt(btn.dataset.removeVariant);
+        this._variants.splice(idx, 1);
+        this._renderVariants();
+        this._updateVariantsPreview();
+      });
+    });
+
+    this._updateVariantsPreview();
+  },
+
+  _updateVariantsPreview() {
+    const preview = document.getElementById('variants-preview');
+    if (!preview) return;
+
+    const variants = this._variants
+      .filter(v => v.size.trim() !== '')
+      .map(v => ({ size: v.size, stock: v.stock }));
+
+    const json = { variants };
+    preview.textContent = JSON.stringify(json);
+  },
+
+  _addVariant() {
+    this._variants.push({ size: '', stock: 0 });
+    this._renderVariants();
+  },
+
   _clearErrors() {
-    document.querySelectorAll('[data-field], #metadata-error').forEach(el => {
+    document.querySelectorAll('[data-field], #metadata-error, #variants-error').forEach(el => {
       el.textContent = '';
       el.classList.add('d-none');
     });
@@ -943,6 +1082,15 @@ const ProductFormView = {
         el.classList.remove('d-none');
         return;
       }
+    }
+
+    // Add variants to metadata
+    const variants = this._variants
+      .filter(v => v.size.trim() !== '')
+      .map(v => ({ size: v.size, stock: v.stock }));
+
+    if (variants.length > 0) {
+      metadata.variants = variants;
     }
 
     const stock = unlimited ? -1 : parseInt(stockInput.value, 10);
