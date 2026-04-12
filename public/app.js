@@ -98,6 +98,27 @@ const Api = {
   deleteImage(key) {
     return this._fetch(`/admin/images/${encodeURIComponent(key)}`, { method: 'DELETE' });
   },
+
+  // Orders
+  getOrders(params = {}) {
+    const clean = Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
+    );
+    const qs = new URLSearchParams(clean).toString();
+    return this._fetch(`/admin/orders${qs ? `?${qs}` : ''}`);
+  },
+
+  getOrder(id)          { return this._fetch(`/admin/orders/${id}`); },
+  updateOrder(id, data) { return this._fetch(`/admin/orders/${id}`, { method: 'PUT', body: JSON.stringify(data) }); },
+
+  getOrderRates(id, params) {
+    const qs = new URLSearchParams(params).toString();
+    return this._fetch(`/admin/orders/${id}/rates?${qs}`);
+  },
+
+  generateShippingLabel(id, data) {
+    return this._fetch(`/admin/orders/${id}/shipping-label`, { method: 'POST', body: JSON.stringify(data) });
+  },
 };
 
 // ── Toast ───────────────────────────────────────────────────────
@@ -179,6 +200,16 @@ function activeBadge(active) {
     : '<span class="badge text-bg-secondary">Inactive</span>';
 }
 
+function statusBadge(s) {
+  const cls = { pending: 'text-bg-warning', paid: 'text-bg-success', fulfilled: 'text-bg-primary', cancelled: 'text-bg-secondary' };
+  return `<span class="badge ${cls[s] ?? 'text-bg-secondary'}">${escHtml(s ?? '—')}</span>`;
+}
+
+function fulfillmentBadge(s) {
+  const cls = { unfulfilled: 'text-bg-danger', processing: 'text-bg-warning', shipped: 'text-bg-info', delivered: 'text-bg-success' };
+  return `<span class="badge ${cls[s] ?? 'text-bg-secondary'}">${escHtml(s ?? '—')}</span>`;
+}
+
 function currencySymbol(code) {
   return { usd: '$', eur: '€', gbp: '£' }[code] ?? code.toUpperCase();
 }
@@ -218,16 +249,30 @@ function confirmModal(title, bodyHtml, btnLabel = 'Delete', btnClass = 'btn-dang
 
 // ── Shared navbar ───────────────────────────────────────────────
 function renderNavbar() {
+  const hash      = location.hash.replace(/^#/, '');
+  const onOrders  = hash.startsWith('/orders');
+  const onProducts = !onOrders;
   return `
     <nav class="navbar navbar-expand-lg border-bottom">
       <div class="container-fluid">
         <a class="navbar-brand" href="#/products">
           <i class="bi bi-bag-check-fill text-success me-2"></i>Ecommaxxing
         </a>
-        <div class="d-flex align-items-center gap-3">
-          <span class="text-secondary small d-none d-sm-inline">Admin Portal</span>
+        <div class="d-flex align-items-center gap-2 gap-sm-3">
+          <ul class="nav nav-pills nav-sm d-flex gap-1 mb-0">
+            <li class="nav-item">
+              <a class="nav-link py-1 px-2 small ${onProducts ? 'active' : ''}" href="#/products">
+                <i class="bi bi-box-seam me-1"></i>Products
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link py-1 px-2 small ${onOrders ? 'active' : ''}" href="#/orders">
+                <i class="bi bi-receipt me-1"></i>Orders
+              </a>
+            </li>
+          </ul>
           <button class="btn btn-outline-secondary btn-sm" id="logout-btn">
-            <i class="bi bi-box-arrow-right me-1"></i>Logout
+            <i class="bi bi-box-arrow-right me-1"></i><span class="d-none d-sm-inline">Logout</span>
           </button>
         </div>
       </div>
@@ -939,6 +984,637 @@ const ProductFormView = {
 };
 
 // ═══════════════════════════════════════════════════════════════
+// View: Orders List
+// ═══════════════════════════════════════════════════════════════
+const OrdersListView = {
+  _offset:          0,
+  _limit:           25,
+  _statusFilter:    '',
+  _fulfillFilter:   '',
+
+  render() {
+    return `
+      ${renderNavbar()}
+      <div class="container-fluid py-4">
+        <div class="d-flex justify-content-between align-items-start mb-4 gap-3 flex-wrap">
+          <div>
+            <h2 class="fw-bold mb-0">Orders</h2>
+            <p class="text-secondary small mb-0">Manage and fulfill customer orders</p>
+          </div>
+        </div>
+
+        <!-- Quick-filter pills -->
+        <div class="d-flex flex-wrap gap-2 mb-3" id="quick-filters">
+          <button class="btn btn-sm btn-primary quick-filter active" data-status="" data-fulfill="">All Orders</button>
+          <button class="btn btn-sm btn-outline-success quick-filter" data-status="paid" data-fulfill="unfulfilled">
+            <i class="bi bi-inbox me-1"></i>New (paid, unshipped)
+          </button>
+          <button class="btn btn-sm btn-outline-warning quick-filter" data-status="" data-fulfill="processing">
+            <i class="bi bi-box-seam me-1"></i>Processing
+          </button>
+          <button class="btn btn-sm btn-outline-info quick-filter" data-status="" data-fulfill="shipped">
+            <i class="bi bi-truck me-1"></i>Shipped
+          </button>
+          <button class="btn btn-sm btn-outline-secondary quick-filter" data-status="cancelled" data-fulfill="">
+            <i class="bi bi-x-circle me-1"></i>Cancelled
+          </button>
+        </div>
+
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex flex-wrap gap-2">
+              <select class="form-select form-select-sm" id="status-filter" style="width:auto">
+                <option value="">All Statuses</option>
+                <option value="pending">Pending</option>
+                <option value="paid">Paid</option>
+                <option value="fulfilled">Fulfilled</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+              <select class="form-select form-select-sm" id="fulfillment-filter" style="width:auto">
+                <option value="">All Fulfillment</option>
+                <option value="unfulfilled">Unfulfilled</option>
+                <option value="processing">Processing</option>
+                <option value="shipped">Shipped</option>
+                <option value="delivered">Delivered</option>
+              </select>
+            </div>
+            <span class="text-secondary small" id="orders-count"></span>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-dark table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th class="ps-3 text-uppercase text-secondary small">Order</th>
+                  <th class="text-uppercase text-secondary small">Customer</th>
+                  <th class="text-uppercase text-secondary small d-none d-md-table-cell">Items</th>
+                  <th class="text-uppercase text-secondary small">Total</th>
+                  <th class="text-uppercase text-secondary small">Payment</th>
+                  <th class="text-uppercase text-secondary small">Fulfillment</th>
+                  <th class="text-uppercase text-secondary small d-none d-md-table-cell">Date</th>
+                  <th class="pe-3 text-uppercase text-secondary small"></th>
+                </tr>
+              </thead>
+              <tbody id="orders-tbody">
+                <tr>
+                  <td colspan="8" class="text-center py-5">
+                    <div class="spinner-border text-success" role="status">
+                      <span class="visually-hidden">Loading…</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card-footer d-flex justify-content-between align-items-center" id="orders-pagination">
+            <button class="btn btn-sm btn-outline-secondary" id="orders-prev-btn" disabled>
+              <i class="bi bi-chevron-left me-1"></i>Previous
+            </button>
+            <span class="text-secondary small" id="orders-page-info"></span>
+            <button class="btn btn-sm btn-outline-secondary" id="orders-next-btn" disabled>
+              Next<i class="bi bi-chevron-right ms-1"></i>
+            </button>
+          </div>
+        </div>
+      </div>`;
+  },
+
+  async init() {
+    document.getElementById('logout-btn').addEventListener('click', () => Auth.logout());
+
+    document.getElementById('quick-filters').addEventListener('click', e => {
+      const btn = e.target.closest('.quick-filter');
+      if (!btn) return;
+      document.querySelectorAll('.quick-filter').forEach(b => {
+        b.classList.remove('active');
+        b.className = b.className.replace('btn-primary', 'btn-outline-' + (b.dataset.status === 'cancelled' ? 'secondary' : b.dataset.fulfill === 'processing' ? 'warning' : b.dataset.fulfill === 'shipped' ? 'info' : 'success'));
+      });
+      btn.className = btn.className.replace(/btn-outline-\w+/, 'btn-primary');
+      btn.classList.add('active');
+
+      this._statusFilter  = btn.dataset.status;
+      this._fulfillFilter = btn.dataset.fulfill;
+      this._offset = 0;
+
+      document.getElementById('status-filter').value      = this._statusFilter;
+      document.getElementById('fulfillment-filter').value = this._fulfillFilter;
+      this._load();
+    });
+
+    document.getElementById('status-filter').addEventListener('change', e => {
+      this._statusFilter = e.target.value;
+      this._offset = 0;
+      this._load();
+    });
+    document.getElementById('fulfillment-filter').addEventListener('change', e => {
+      this._fulfillFilter = e.target.value;
+      this._offset = 0;
+      this._load();
+    });
+
+    document.getElementById('orders-prev-btn').addEventListener('click', () => {
+      this._offset = Math.max(0, this._offset - this._limit);
+      this._load();
+    });
+    document.getElementById('orders-next-btn').addEventListener('click', () => {
+      this._offset += this._limit;
+      this._load();
+    });
+
+    document.getElementById('orders-tbody').addEventListener('click', e => {
+      const btn = e.target.closest('[data-action]');
+      if (btn?.dataset.action === 'view') Router.go(`/orders/${btn.dataset.id}`);
+    });
+
+    await this._load();
+  },
+
+  async _load() {
+    const tbody = document.getElementById('orders-tbody');
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" class="text-center py-5">
+          <div class="spinner-border text-success" role="status"></div>
+        </td>
+      </tr>`;
+
+    try {
+      const orders = await Api.getOrders({
+        limit:              this._limit,
+        offset:             this._offset,
+        status:             this._statusFilter || undefined,
+        fulfillment_status: this._fulfillFilter || undefined,
+      });
+      this._renderRows(orders);
+      this._updatePagination(orders.length);
+    } catch (err) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="8" class="text-center py-4 text-danger">
+            <i class="bi bi-exclamation-circle me-2"></i>${escHtml(err.message)}
+          </td>
+        </tr>`;
+    }
+  },
+
+  _renderRows(orders) {
+    const tbody   = document.getElementById('orders-tbody');
+    const countEl = document.getElementById('orders-count');
+    countEl.textContent = `${orders.length} order${orders.length !== 1 ? 's' : ''}`;
+
+    if (orders.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="8" class="text-center py-5 text-secondary">
+            <i class="bi bi-inbox fs-2 d-block mb-2 opacity-50"></i>
+            No orders found
+          </td>
+        </tr>`;
+      return;
+    }
+
+    tbody.innerHTML = orders.map(o => `
+      <tr>
+        <td class="ps-3">
+          <div class="fw-semibold font-monospace small">#${o.id.slice(0, 8).toUpperCase()}</div>
+          ${o.tracking_number
+            ? `<div class="text-secondary" style="font-size:0.7rem"><i class="bi bi-truck me-1"></i>${escHtml(o.tracking_number)}</div>`
+            : ''}
+        </td>
+        <td>
+          <div class="fw-semibold small">${escHtml(o.customer_name ?? '—')}</div>
+          <div class="text-secondary" style="font-size:0.75rem">${escHtml(o.customer_email ?? '')}</div>
+        </td>
+        <td class="text-secondary small d-none d-md-table-cell">
+          ${(o.items?.length ?? 0)} item${(o.items?.length ?? 0) !== 1 ? 's' : ''}
+        </td>
+        <td class="fw-semibold">${formatPrice(o.amount_total, o.currency)}</td>
+        <td>${statusBadge(o.status)}</td>
+        <td>${fulfillmentBadge(o.fulfillment_status)}</td>
+        <td class="text-secondary small d-none d-md-table-cell">${formatDate(o.created_at)}</td>
+        <td class="pe-3">
+          <button class="btn btn-sm btn-outline-secondary" data-action="view" data-id="${escHtml(o.id)}">
+            <i class="bi bi-eye me-1"></i>View
+          </button>
+        </td>
+      </tr>`).join('');
+  },
+
+  _updatePagination(count) {
+    const prev = document.getElementById('orders-prev-btn');
+    const next = document.getElementById('orders-next-btn');
+    const info = document.getElementById('orders-page-info');
+    prev.disabled = this._offset === 0;
+    next.disabled = count < this._limit;
+    info.textContent = count > 0 ? `${this._offset + 1}–${this._offset + count}` : '';
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════
+// View: Order Detail
+// ═══════════════════════════════════════════════════════════════
+const OrderDetailView = {
+  _id:    null,
+  _order: null,
+
+  render(id) {
+    this._id    = id;
+    this._order = null;
+    return `
+      ${renderNavbar()}
+      <div class="container py-4" style="max-width:960px">
+        <div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+          <a href="#/orders" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Orders
+          </a>
+          <h2 class="fw-bold mb-0" id="order-title">
+            <span class="text-secondary">Loading…</span>
+          </h2>
+        </div>
+        <div id="order-loader" class="page-loader">
+          <div class="spinner-border text-success"></div>
+        </div>
+        <div id="order-content" class="d-none"></div>
+      </div>`;
+  },
+
+  async init(id) {
+    this._id = id;
+    document.getElementById('logout-btn').addEventListener('click', () => Auth.logout());
+    await this._load();
+  },
+
+  async _load() {
+    try {
+      this._order = await Api.getOrder(this._id);
+      this._renderContent();
+    } catch (err) {
+      document.getElementById('order-loader').innerHTML =
+        `<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>Failed to load order: ${escHtml(err.message)}</div>`;
+    }
+  },
+
+  _renderContent() {
+    const o = this._order;
+    document.getElementById('order-title').innerHTML =
+      `Order <span class="font-monospace">#${o.id.slice(0, 8).toUpperCase()}</span>
+       <span class="ms-2">${statusBadge(o.status)}</span>
+       <span class="ms-1">${fulfillmentBadge(o.fulfillment_status)}</span>`;
+
+    document.getElementById('order-loader').classList.add('d-none');
+    const content = document.getElementById('order-content');
+    content.classList.remove('d-none');
+    content.innerHTML = this._buildHtml(o);
+    this._bindEvents();
+  },
+
+  _buildHtml(o) {
+    return `
+      <div class="row g-4">
+
+        <!-- ── Left column ─────────────────────────────────── -->
+        <div class="col-lg-7">
+
+          <!-- Customer & Shipping -->
+          <div class="card mb-4">
+            <div class="card-header small fw-semibold text-uppercase text-secondary d-flex justify-content-between align-items-center">
+              Customer &amp; Shipping
+              <button class="btn btn-sm btn-outline-secondary" id="edit-addr-btn">
+                <i class="bi bi-pencil me-1"></i>Edit
+              </button>
+            </div>
+            <!-- Display mode -->
+            <div class="card-body" id="addr-display">
+              ${this._addrDisplay(o)}
+            </div>
+            <!-- Edit mode (hidden) -->
+            <div class="card-body d-none" id="addr-edit">
+              ${this._addrForm(o)}
+            </div>
+          </div>
+
+          <!-- Fulfillment actions -->
+          <div class="card mb-4">
+            <div class="card-header small fw-semibold text-uppercase text-secondary">
+              Fulfillment
+            </div>
+            <div class="card-body">
+
+              <!-- Quick action buttons -->
+              <div class="mb-3">
+                <div class="text-secondary small mb-2 fw-semibold">Quick Actions</div>
+                <div class="d-flex flex-wrap gap-2" id="quick-actions">
+                  ${this._quickActions(o)}
+                </div>
+              </div>
+
+              <hr class="border-secondary">
+
+              <!-- Existing tracking info (read-only banner) -->
+              ${o.tracking_number ? `
+              <div class="alert alert-secondary py-2 mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div class="small">
+                  <i class="bi bi-truck me-2"></i>
+                  <strong>${escHtml(o.shipping_carrier ?? '')}</strong>
+                  ${o.shipping_service ? `<span class="text-secondary ms-1">${escHtml(o.shipping_service)}</span>` : ''}
+                  <span class="ms-2 font-monospace">${escHtml(o.tracking_number)}</span>
+                </div>
+                ${o.label_url
+                  ? `<a href="${escHtml(o.label_url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">
+                       <i class="bi bi-printer me-1"></i>Print Label
+                     </a>`
+                  : ''}
+              </div>` : ''}
+
+              <!-- Manual tracking form -->
+              <div class="text-secondary small mb-2 fw-semibold">Tracking Information</div>
+              <form id="tracking-form">
+                <div class="row g-2">
+                  <div class="col-sm-6">
+                    <label class="form-label small mb-1">Carrier</label>
+                    <select class="form-select form-select-sm" name="shipping_carrier">
+                      <option value="">— Select —</option>
+                      ${['USPS','UPS','FedEx','DHL'].map(c =>
+                        `<option value="${c}" ${o.shipping_carrier === c ? 'selected' : ''}>${c}</option>`
+                      ).join('')}
+                    </select>
+                  </div>
+                  <div class="col-sm-6">
+                    <label class="form-label small mb-1">Service</label>
+                    <input type="text" class="form-control form-control-sm" name="shipping_service"
+                           value="${escHtml(o.shipping_service ?? '')}" placeholder="e.g. Priority Mail">
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label small mb-1">Tracking Number</label>
+                    <input type="text" class="form-control form-control-sm" name="tracking_number"
+                           value="${escHtml(o.tracking_number ?? '')}" placeholder="Enter tracking number">
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label small mb-1">Label URL <span class="text-secondary">(optional)</span></label>
+                    <input type="url" class="form-control form-control-sm" name="label_url"
+                           value="${escHtml(o.label_url ?? '')}" placeholder="https://...">
+                  </div>
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary mt-3" id="save-tracking-btn">
+                  <i class="bi bi-check-lg me-1"></i>Save Tracking
+                </button>
+              </form>
+
+              <hr class="border-secondary">
+
+              <!-- Notes -->
+              <div class="text-secondary small mb-2 fw-semibold">Internal Notes <span class="fw-normal">(not shown to customer)</span></div>
+              <form id="notes-form">
+                <textarea class="form-control form-control-sm" name="notes" rows="3"
+                          placeholder="Add packing notes, customer requests, etc.…">${escHtml(o.notes ?? '')}</textarea>
+                <button type="submit" class="btn btn-sm btn-outline-secondary mt-2">
+                  <i class="bi bi-save me-1"></i>Save Notes
+                </button>
+              </form>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ── Right column ────────────────────────────────── -->
+        <div class="col-lg-5">
+
+          <!-- Line items -->
+          <div class="card mb-4">
+            <div class="card-header small fw-semibold text-uppercase text-secondary">
+              Order Items
+            </div>
+            ${(o.items ?? []).length === 0
+              ? '<div class="card-body text-secondary small">No items</div>'
+              : `<ul class="list-group list-group-flush">
+                  ${(o.items ?? []).map(item => `
+                    <li class="list-group-item bg-transparent border-secondary px-3 py-2">
+                      <div class="d-flex justify-content-between align-items-start gap-2">
+                        <div>
+                          <div class="fw-semibold small">${escHtml(item.product_name ?? '—')}</div>
+                          <div class="text-secondary" style="font-size:0.75rem">
+                            ${item.quantity} × ${formatPrice(item.price, item.currency)}
+                          </div>
+                        </div>
+                        <div class="fw-semibold small text-nowrap">
+                          ${formatPrice(item.price * item.quantity, item.currency)}
+                        </div>
+                      </div>
+                    </li>`).join('')}
+                  <li class="list-group-item bg-transparent border-secondary px-3 py-2">
+                    <div class="d-flex justify-content-between fw-bold">
+                      <span>Total</span>
+                      <span class="text-success">${formatPrice(o.amount_total, o.currency)}</span>
+                    </div>
+                  </li>
+                </ul>`}
+          </div>
+
+          <!-- Order metadata -->
+          <div class="card">
+            <div class="card-header small fw-semibold text-uppercase text-secondary">
+              Order Details
+            </div>
+            <div class="card-body small">
+              <dl class="row g-1 mb-0">
+                <dt class="col-5 text-secondary">Order ID</dt>
+                <dd class="col-7 font-monospace text-truncate" style="font-size:0.7rem" title="${escHtml(o.id)}">${escHtml(o.id)}</dd>
+
+                <dt class="col-5 text-secondary">Date</dt>
+                <dd class="col-7">${formatDate(o.created_at)}</dd>
+
+                <dt class="col-5 text-secondary">Customer</dt>
+                <dd class="col-7">${escHtml(o.customer_email ?? '—')}</dd>
+
+                <dt class="col-5 text-secondary">Stripe Session</dt>
+                <dd class="col-7 font-monospace text-truncate" style="font-size:0.7rem"
+                    title="${escHtml(o.stripe_session_id ?? '')}">
+                  ${o.stripe_session_id ? escHtml(o.stripe_session_id) : '—'}
+                </dd>
+
+                <dt class="col-5 text-secondary">Payment Intent</dt>
+                <dd class="col-7 font-monospace text-truncate" style="font-size:0.7rem"
+                    title="${escHtml(o.stripe_payment_intent_id ?? '')}">
+                  ${o.stripe_payment_intent_id ? escHtml(o.stripe_payment_intent_id) : '—'}
+                </dd>
+              </dl>
+            </div>
+          </div>
+
+        </div>
+      </div>`;
+  },
+
+  _addrDisplay(o) {
+    const addrLines = [
+      o.shipping_address_line1,
+      o.shipping_address_line2,
+      [o.shipping_city, o.shipping_state, o.shipping_postal_code].filter(Boolean).join(', '),
+      o.shipping_country,
+    ].filter(Boolean);
+
+    return `
+      <div class="row g-3 small">
+        <div class="col-sm-6">
+          <div class="text-secondary mb-1">Name</div>
+          <div class="fw-semibold">${escHtml(o.customer_name ?? '—')}</div>
+        </div>
+        <div class="col-sm-6">
+          <div class="text-secondary mb-1">Email</div>
+          <div>${o.customer_email
+            ? `<a href="mailto:${escHtml(o.customer_email)}" class="text-decoration-none">${escHtml(o.customer_email)}</a>`
+            : '—'}</div>
+        </div>
+        <div class="col-12">
+          <div class="text-secondary mb-1">Shipping Address</div>
+          ${addrLines.length
+            ? `<div>${addrLines.map(l => escHtml(l)).join('<br>')}</div>`
+            : '<div class="text-secondary">No address on file</div>'}
+          ${o.shipping_phone
+            ? `<div class="text-secondary mt-1"><i class="bi bi-telephone me-1"></i>${escHtml(o.shipping_phone)}</div>`
+            : ''}
+        </div>
+      </div>`;
+  },
+
+  _addrForm(o) {
+    const f = (name, label, value, type = 'text') => `
+      <div>
+        <label class="form-label small mb-1">${label}</label>
+        <input type="${type}" class="form-control form-control-sm" name="${name}" value="${escHtml(value ?? '')}">
+      </div>`;
+    return `
+      <form id="addr-form">
+        <div class="row g-2">
+          <div class="col-sm-6">${f('customer_name',        'Full Name',             o.customer_name)}</div>
+          <div class="col-sm-6">${f('customer_email',       'Email',                 o.customer_email, 'email')}</div>
+          <div class="col-12">${f('shipping_address_line1', 'Address Line 1',        o.shipping_address_line1)}</div>
+          <div class="col-12">${f('shipping_address_line2', 'Address Line 2 (opt.)', o.shipping_address_line2)}</div>
+          <div class="col-5">${f('shipping_city',           'City',                  o.shipping_city)}</div>
+          <div class="col-3">${f('shipping_state',          'State',                 o.shipping_state)}</div>
+          <div class="col-4">${f('shipping_postal_code',    'ZIP',                   o.shipping_postal_code)}</div>
+          <div class="col-sm-6">${f('shipping_country',    'Country (2-char)',       o.shipping_country)}</div>
+          <div class="col-sm-6">${f('shipping_phone',      'Phone',                  o.shipping_phone)}</div>
+        </div>
+        <div class="d-flex gap-2 mt-3">
+          <button type="submit" class="btn btn-sm btn-primary">
+            <i class="bi bi-check-lg me-1"></i>Save Address
+          </button>
+          <button type="button" class="btn btn-sm btn-secondary" id="cancel-addr-btn">Cancel</button>
+        </div>
+      </form>`;
+  },
+
+  _quickActions(o) {
+    const { status, fulfillment_status: fs } = o;
+    const btns = [];
+
+    if (status === 'paid' && (fs === 'unfulfilled' || !fs)) {
+      btns.push(`<button class="btn btn-sm btn-outline-warning" data-update='{"fulfillment_status":"processing"}'>
+        <i class="bi bi-box-seam me-1"></i>Start Processing
+      </button>`);
+    }
+    if (fs === 'processing') {
+      btns.push(`<button class="btn btn-sm btn-outline-info" data-update='{"fulfillment_status":"shipped","status":"fulfilled"}'>
+        <i class="bi bi-truck me-1"></i>Mark Shipped
+      </button>`);
+    }
+    if (fs === 'shipped') {
+      btns.push(`<button class="btn btn-sm btn-outline-success" data-update='{"fulfillment_status":"delivered","status":"fulfilled"}'>
+        <i class="bi bi-check2-circle me-1"></i>Mark Delivered
+      </button>`);
+    }
+    if (status !== 'cancelled') {
+      btns.push(`<button class="btn btn-sm btn-outline-danger" data-update='{"status":"cancelled"}' data-confirm="Cancel this order?">
+        <i class="bi bi-x-circle me-1"></i>Cancel Order
+      </button>`);
+    }
+    if (btns.length === 0) {
+      return `<span class="text-secondary small">
+        Order is ${status === 'cancelled' ? 'cancelled' : 'complete — no further actions needed'}.
+      </span>`;
+    }
+    return btns.join('');
+  },
+
+  _bindEvents() {
+    // Logout already bound by init
+    const editBtn = document.getElementById('edit-addr-btn');
+    editBtn.addEventListener('click', () => {
+      document.getElementById('addr-display').classList.add('d-none');
+      document.getElementById('addr-edit').classList.remove('d-none');
+      editBtn.classList.add('d-none');
+    });
+
+    // Cancel address edit
+    document.getElementById('order-content').addEventListener('click', e => {
+      if (e.target.closest('#cancel-addr-btn')) {
+        document.getElementById('addr-display').classList.remove('d-none');
+        document.getElementById('addr-edit').classList.add('d-none');
+        document.getElementById('edit-addr-btn').classList.remove('d-none');
+      }
+    });
+
+    // Save address
+    document.getElementById('addr-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn  = e.target.querySelector('[type=submit]');
+      const data = Object.fromEntries(new FormData(e.target).entries());
+      // Blank string → null
+      Object.keys(data).forEach(k => { if (data[k] === '') data[k] = null; });
+      btn.disabled = true;
+      await this._save(data, 'Address updated');
+    });
+
+    // Tracking form
+    document.getElementById('tracking-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn  = document.getElementById('save-tracking-btn');
+      const data = Object.fromEntries(new FormData(e.target).entries());
+      Object.keys(data).forEach(k => { if (data[k] === '') data[k] = null; });
+      btn.disabled = true;
+      await this._save(data, 'Tracking saved');
+    });
+
+    // Notes form
+    document.getElementById('notes-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const notes = e.target.querySelector('[name=notes]').value;
+      const btn   = e.target.querySelector('[type=submit]');
+      btn.disabled = true;
+      await this._save({ notes }, 'Notes saved');
+    });
+
+    // Quick action buttons
+    document.getElementById('quick-actions').addEventListener('click', async e => {
+      const btn = e.target.closest('[data-update]');
+      if (!btn) return;
+      const payload  = JSON.parse(btn.dataset.update);
+      const confirmMsg = btn.dataset.confirm;
+      if (confirmMsg) {
+        const ok = await confirmModal('Confirm', confirmMsg, 'Yes, proceed', 'btn-danger');
+        if (!ok) return;
+      }
+      btn.disabled = true;
+      await this._save(payload, 'Order updated');
+    });
+  },
+
+  async _save(data, successMsg) {
+    try {
+      this._order = await Api.updateOrder(this._id, data);
+      Toast.success(successMsg);
+      this._renderContent();
+    } catch (err) {
+      Toast.error(err.message);
+      // Re-enable any disabled buttons
+      document.querySelectorAll('#order-content button[disabled]').forEach(b => { b.disabled = false; });
+    }
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════
 // Router
 // ═══════════════════════════════════════════════════════════════
 const Router = {
@@ -985,6 +1661,19 @@ const Router = {
     if (editMatch) {
       app.innerHTML = ProductFormView.render(editMatch[1]);
       ProductFormView.init(editMatch[1]);
+      return;
+    }
+
+    if (hash === '/orders') {
+      app.innerHTML = OrdersListView.render();
+      OrdersListView.init();
+      return;
+    }
+
+    const orderMatch = hash.match(/^\/orders\/([^/]+)$/);
+    if (orderMatch) {
+      app.innerHTML = OrderDetailView.render(orderMatch[1]);
+      OrderDetailView.init(orderMatch[1]);
       return;
     }
 
