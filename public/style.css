@@ -47,14 +47,9 @@ body {
 }
 
 .navbar-brand {
-  font-weight: 900;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  font-size: 0.95rem;
-  color: var(--text) !important;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 0;
   padding: 0;
   transition: opacity 0.15s;
 }
@@ -63,12 +58,26 @@ body {
   opacity: 0.8;
 }
 
+.brand-logo {
+  height: 32px;
+  width: auto;
+  object-fit: contain;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
 .navbar-brand .brand-sub {
-  font-weight: 400;
-  letter-spacing: 0.06em;
-  font-size: 0.6rem;
-  color: var(--text-muted);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  color: var(--gold);
+  border: 1px solid var(--gold-border);
+  background: var(--gold-glow);
+  padding: 2px 6px;
+  border-radius: 3px;
   vertical-align: middle;
+  flex-shrink: 0;
 }
 
 /* ── Nav pills ──────────────────────────────────────────────────── */
@@ -417,15 +426,18 @@ textarea.form-control {
 }
 
 .login-logo {
-  width: 56px;
-  height: 56px;
-  background: var(--gold-glow);
-  border: 1px solid var(--gold-border);
-  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 1rem;
+  margin: 0 auto 0.5rem;
+}
+
+.login-brand-img {
+  width: 200px;
+  height: auto;
+  object-fit: contain;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
 }
 
 /* ── Modals ─────────────────────────────────────────────────────── */
@@ -561,9 +573,9 @@ hr {
 
 /* ── Extra small screens (≤480px) ────────────────────────────────── */
 @media (max-width: 480px) {
-  /* Navbar brand: hide full text, show star + short name */
-  .navbar-brand .brand-full  { display: none; }
-  .navbar-brand .brand-short { display: inline; }
+  /* Navbar brand: scale logo down on tiny screens */
+  .brand-logo { height: 26px; }
+  .navbar-brand .brand-sub { display: none; }
 
   /* Nav links: icon only */
   .nav-link .nav-label { display: none; }

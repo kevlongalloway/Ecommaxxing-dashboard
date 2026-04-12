@@ -248,10 +248,6 @@ function confirmModal(title, bodyHtml, btnLabel = 'Delete', btnClass = 'btn-dang
 }
 
 // ── Shared navbar ───────────────────────────────────────────────
-const STAR_SVG = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">
-  <path d="M12 2L14.6 8.73L22 9.27L16.8 13.87L18.47 21.02L12 17.27L5.53 21.02L7.2 13.87L2 9.27L9.4 8.73L12 2Z" fill="#C9A227"/>
-</svg>`;
-
 function renderNavbar() {
   const hash       = location.hash.replace(/^#/, '');
   const onOrders   = hash.startsWith('/orders');
@@ -260,10 +256,8 @@ function renderNavbar() {
     <nav class="navbar border-bottom">
       <div class="container-fluid d-flex align-items-center justify-content-between" style="height:56px">
         <a class="navbar-brand" href="#/products">
-          ${STAR_SVG}
-          <span class="brand-full">BLACKSTAR</span>
-          <span class="brand-short" style="display:none">BSA</span>
-          <span class="brand-sub d-none d-md-inline ms-1">ADMIN</span>
+          <img src="/IMG_1306.jpeg" alt="Blackstar" class="brand-logo">
+          <span class="brand-sub ms-2">ADMIN</span>
         </a>
         <div class="d-flex align-items-center gap-2">
           <ul class="nav nav-pills d-flex gap-1 mb-0">
@@ -297,12 +291,9 @@ const LoginView = {
           <div class="card-body p-4 p-sm-5">
             <div class="text-center mb-4">
               <div class="login-logo">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 2L14.6 8.73L22 9.27L16.8 13.87L18.47 21.02L12 17.27L5.53 21.02L7.2 13.87L2 9.27L9.4 8.73L12 2Z" fill="#C9A227"/>
-                </svg>
+                <img src="/IMG_1306.jpeg" alt="Blackstar" class="login-brand-img">
               </div>
-              <h4 class="fw-black mb-0" style="letter-spacing:0.1em;text-transform:uppercase;font-size:1.1rem">Blackstar</h4>
-              <p class="mb-0" style="font-size:0.65rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--text-muted)">Admin Panel</p>
+              <p class="mb-0 mt-2" style="font-size:0.65rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--text-muted)">Admin Panel</p>
               <p class="text-secondary small mt-3 mb-0">Sign in to continue</p>
             </div>
             <div id="login-error" class="alert alert-danger d-none py-2 small" role="alert"></div>
