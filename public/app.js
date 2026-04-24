@@ -81,6 +81,7 @@ const Api = {
   createProduct(data)  { return this._fetch('/admin/products', { method: 'POST', body: JSON.stringify(data) }); },
   updateProduct(id, d) { return this._fetch(`/admin/products/${id}`, { method: 'PUT', body: JSON.stringify(d) }); },
   deleteProduct(id)    { return this._fetch(`/admin/products/${id}`, { method: 'DELETE' }); },
+  reorderProducts(products) { return this._fetch('/admin/products/reorder', { method: 'PUT', body: JSON.stringify({ products }) }); },
 
   async uploadImage(file) {
     const form = new FormData();
@@ -344,9 +345,11 @@ const LoginView = {
 // View: Products List
 // ═══════════════════════════════════════════════════════════════
 const ProductsListView = {
-  _offset:   0,
-  _limit:    50,
-  _filter:  'all',
+  _offset:     0,
+  _limit:      50,
+  _filter:    'all',
+  _products:   [],
+  _dragSrcIdx: -1,
 
   render() {
     return `
@@ -379,6 +382,7 @@ const ProductsListView = {
             <table class="table table-dark table-hover align-middle mb-0 products-table">
               <thead>
                 <tr>
+                  <th style="width:32px"></th>
                   <th class="ps-3">Product</th>
                   <th>Price</th>
                   <th>Stock</th>
@@ -389,7 +393,7 @@ const ProductsListView = {
               </thead>
               <tbody id="products-tbody">
                 <tr>
-                  <td colspan="6" class="text-center py-5">
+                  <td colspan="7" class="text-center py-5">
                     <div class="spinner-border text-success" role="status">
                       <span class="visually-hidden">Loading…</span>
                     </div>
@@ -473,14 +477,68 @@ const ProductsListView = {
       }
     });
 
+    const tbody = document.getElementById('products-tbody');
+
+    tbody.addEventListener('dragstart', e => {
+      if (e.target.closest('[data-action]')) { e.preventDefault(); return; }
+      const row = e.target.closest('tr[data-index]');
+      if (!row) return;
+      this._dragSrcIdx = +row.dataset.index;
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(() => row.classList.add('dragging'), 0);
+    });
+
+    tbody.addEventListener('dragend', () => {
+      tbody.querySelectorAll('tr').forEach(r => r.classList.remove('dragging', 'drag-over'));
+      this._dragSrcIdx = -1;
+    });
+
+    tbody.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const row = e.target.closest('tr[data-index]');
+      if (!row || +row.dataset.index === this._dragSrcIdx) return;
+      tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
+      row.classList.add('drag-over');
+    });
+
+    tbody.addEventListener('dragleave', e => {
+      if (!tbody.contains(e.relatedTarget)) {
+        tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
+      }
+    });
+
+    tbody.addEventListener('drop', e => {
+      e.preventDefault();
+      const row = e.target.closest('tr[data-index]');
+      if (!row || this._dragSrcIdx === -1) return;
+      const destIdx = +row.dataset.index;
+      if (destIdx === this._dragSrcIdx) return;
+      const reordered = [...this._products];
+      const [moved] = reordered.splice(this._dragSrcIdx, 1);
+      reordered.splice(destIdx, 0, moved);
+      this._products = reordered;
+      this._renderRows(reordered, this._filter === 'inactive');
+      this._saveReorder(reordered);
+    });
+
     await this._load();
+  },
+
+  async _saveReorder(products) {
+    try {
+      await Api.reorderProducts(products.map((p, i) => ({ id: p.id, display_order: i })));
+      Toast.success('Order saved');
+    } catch (err) {
+      Toast.error(`Failed to save order: ${err.message}`);
+    }
   },
 
   async _load() {
     const tbody = document.getElementById('products-tbody');
     tbody.innerHTML = `
       <tr>
-        <td colspan="6" class="text-center py-5">
+        <td colspan="7" class="text-center py-5">
           <div class="spinner-border text-success" role="status"></div>
         </td>
       </tr>`;
@@ -505,7 +563,7 @@ const ProductsListView = {
     } catch (err) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="6" class="text-center py-4 text-danger">
+          <td colspan="7" class="text-center py-4 text-danger">
             <i class="bi bi-exclamation-circle me-2"></i>${escHtml(err.message)}
           </td>
         </tr>`;
@@ -517,13 +575,15 @@ const ProductsListView = {
     const countEl  = document.getElementById('product-count');
     const pageRow  = document.getElementById('pagination-row');
 
+    this._products = products;
+
     pageRow.style.display = hidePagination ? 'none' : '';
     countEl.textContent   = `${products.length} product${products.length !== 1 ? 's' : ''}`;
 
     if (products.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="6" class="text-center py-5 text-secondary">
+          <td colspan="7" class="text-center py-5 text-secondary">
             <i class="bi bi-inbox fs-2 d-block mb-2 opacity-50"></i>
             No products found
           </td>
@@ -531,13 +591,14 @@ const ProductsListView = {
       return;
     }
 
-    tbody.innerHTML = products.map(p => {
+    tbody.innerHTML = products.map((p, i) => {
       const thumb = p.images?.[0]
         ? `<img src="${escHtml(p.images[0])}" width="40" height="40" class="rounded" style="object-fit:cover" onerror="this.replaceWith(placeholder())">`
         : `<span class="d-inline-flex align-items-center justify-content-center rounded bg-secondary bg-opacity-25" style="width:40px;height:40px"><i class="bi bi-image text-secondary"></i></span>`;
 
       return `
-        <tr>
+        <tr draggable="true" data-index="${i}">
+          <td class="ps-2 text-center"><i class="bi bi-grip-vertical drag-handle"></i></td>
           <td class="ps-3">
             <div class="d-flex align-items-center gap-3">
               ${thumb}

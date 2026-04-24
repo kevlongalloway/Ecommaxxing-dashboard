@@ -368,6 +368,26 @@ textarea.form-control {
   font-weight: 700;
 }
 
+/* ── Drag-and-drop (product reordering) ─────────────────────────── */
+.drag-handle {
+  color: var(--text-muted);
+  cursor: grab;
+  font-size: 1rem;
+  transition: color 0.15s;
+}
+
+tr:hover .drag-handle {
+  color: var(--text-dim);
+}
+
+tr.dragging {
+  opacity: 0.4;
+}
+
+tr.drag-over td {
+  border-top: 2px solid var(--gold) !important;
+}
+
 /* ── Image gallery ──────────────────────────────────────────────── */
 .img-thumb-wrap {
   position: relative;
@@ -524,12 +544,12 @@ hr {
 
 /* ── Products table — hide Stock, Status, Created on mobile ──────── */
 @media (max-width: 767px) {
-  .products-table th:nth-child(3),
-  .products-table td:nth-child(3),
   .products-table th:nth-child(4),
   .products-table td:nth-child(4),
   .products-table th:nth-child(5),
-  .products-table td:nth-child(5) {
+  .products-table td:nth-child(5),
+  .products-table th:nth-child(6),
+  .products-table td:nth-child(6) {
     display: none;
   }
 
@@ -586,9 +606,9 @@ hr {
     padding-right: 0.5rem;
   }
 
-  /* Products table on tiny screens: just name + actions */
-  .products-table th:nth-child(2),
-  .products-table td:nth-child(2) {
+  /* Products table on tiny screens: just handle + name + actions */
+  .products-table th:nth-child(3),
+  .products-table td:nth-child(3) {
     display: none;
   }
 
