@@ -119,6 +119,10 @@ const Api = {
   generateShippingLabel(id, data) {
     return this._fetch(`/admin/orders/${id}/shipping-label`, { method: 'POST', body: JSON.stringify(data) });
   },
+
+  reorderProducts(products) {
+    return this._fetch('/admin/products/reorder', { method: 'PUT', body: JSON.stringify({ products }) });
+  },
 };
 
 // ── Toast ───────────────────────────────────────────────────────
@@ -430,7 +434,9 @@ const ProductsListView = {
       this._load();
     });
 
-    document.getElementById('products-tbody').addEventListener('click', async e => {
+    const tbody = document.getElementById('products-tbody');
+
+    tbody.addEventListener('click', async e => {
       const btn = e.target.closest('[data-action]');
       if (!btn) return;
       const { action, id, name, active } = btn.dataset;
@@ -470,6 +476,86 @@ const ProductsListView = {
         } catch (err) {
           Toast.error(err.message);
         }
+      }
+    });
+
+    // Drag-and-drop handlers
+    let draggedRow = null;
+    let draggedOverRow = null;
+
+    tbody.addEventListener('dragstart', e => {
+      const row = e.target.closest('[data-product-id]');
+      if (!row) return;
+      draggedRow = row;
+      row.style.opacity = '0.5';
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    tbody.addEventListener('dragend', e => {
+      const row = e.target.closest('[data-product-id]');
+      if (row) row.style.opacity = '1';
+      draggedOverRow = null;
+    });
+
+    tbody.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const row = e.target.closest('[data-product-id]');
+      if (!row || row === draggedRow) {
+        draggedOverRow = null;
+        return;
+      }
+      draggedOverRow = row;
+      if (draggedRow && draggedOverRow) {
+        draggedOverRow.style.borderTop = '2px solid var(--bs-success)';
+      }
+    });
+
+    tbody.addEventListener('dragleave', e => {
+      const row = e.target.closest('[data-product-id]');
+      if (row) row.style.borderTop = '';
+    });
+
+    tbody.addEventListener('drop', async e => {
+      e.preventDefault();
+      if (!draggedRow || !draggedOverRow) return;
+
+      const rows = Array.from(tbody.querySelectorAll('[data-product-id]'));
+      const draggedIdx = rows.indexOf(draggedRow);
+      const targetIdx = rows.indexOf(draggedOverRow);
+
+      if (draggedIdx === targetIdx) {
+        draggedRow.style.opacity = '1';
+        draggedOverRow.style.borderTop = '';
+        return;
+      }
+
+      // Reorder rows in DOM
+      if (draggedIdx < targetIdx) {
+        draggedOverRow.parentNode.insertBefore(draggedRow, draggedOverRow.nextSibling);
+      } else {
+        draggedOverRow.parentNode.insertBefore(draggedRow, draggedOverRow);
+      }
+
+      // Extract new product order
+      const newRows = Array.from(tbody.querySelectorAll('[data-product-id]'));
+      const reorderedProducts = newRows.map((row, idx) => ({
+        id: row.dataset.productId,
+        display_order: idx,
+      }));
+
+      draggedRow.style.opacity = '1';
+      draggedOverRow.style.borderTop = '';
+      draggedRow = null;
+      draggedOverRow = null;
+
+      // Save to API
+      try {
+        await Api.reorderProducts(reorderedProducts);
+        Toast.success('Products reordered');
+      } catch (err) {
+        Toast.error(`Failed to save order: ${err.message}`);
+        this._load();
       }
     });
 
@@ -531,15 +617,18 @@ const ProductsListView = {
       return;
     }
 
-    tbody.innerHTML = products.map(p => {
+    tbody.innerHTML = products.map((p, idx) => {
       const thumb = p.images?.[0]
         ? `<img src="${escHtml(p.images[0])}" width="40" height="40" class="rounded" style="object-fit:cover" onerror="this.replaceWith(placeholder())">`
         : `<span class="d-inline-flex align-items-center justify-content-center rounded bg-secondary bg-opacity-25" style="width:40px;height:40px"><i class="bi bi-image text-secondary"></i></span>`;
 
       return `
-        <tr>
+        <tr draggable="true" data-product-id="${escHtml(p.id)}" data-product-index="${idx}" class="product-row" style="cursor:grab">
           <td class="ps-3">
             <div class="d-flex align-items-center gap-3">
+              <div class="drag-handle" style="cursor:grab;color:var(--text-muted);user-select:none">
+                <i class="bi bi-grip-vertical"></i>
+              </div>
               ${thumb}
               <div>
                 <div class="fw-semibold lh-sm">${escHtml(p.name)}</div>
