@@ -479,45 +479,30 @@ const ProductsListView = {
       }
     });
 
-    // Drag-and-drop handlers
+    // Drag-and-drop handlers (Desktop + Touch)
     let draggedRow = null;
     let draggedOverRow = null;
+    let touchStartY = 0;
 
-    tbody.addEventListener('dragstart', e => {
-      const row = e.target.closest('[data-product-id]');
-      if (!row) return;
+    const handleDragStart = (row) => {
       draggedRow = row;
       row.style.opacity = '0.5';
-      e.dataTransfer.effectAllowed = 'move';
-    });
+      row.style.boxShadow = '0 5px 15px rgba(0,0,0,0.3)';
+    };
 
-    tbody.addEventListener('dragend', e => {
-      const row = e.target.closest('[data-product-id]');
-      if (row) row.style.opacity = '1';
+    const handleDragEnd = () => {
+      if (draggedRow) {
+        draggedRow.style.opacity = '1';
+        draggedRow.style.boxShadow = '';
+      }
+      if (draggedOverRow) {
+        draggedOverRow.style.borderTop = '';
+      }
+      draggedRow = null;
       draggedOverRow = null;
-    });
+    };
 
-    tbody.addEventListener('dragover', e => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      const row = e.target.closest('[data-product-id]');
-      if (!row || row === draggedRow) {
-        draggedOverRow = null;
-        return;
-      }
-      draggedOverRow = row;
-      if (draggedRow && draggedOverRow) {
-        draggedOverRow.style.borderTop = '2px solid var(--bs-success)';
-      }
-    });
-
-    tbody.addEventListener('dragleave', e => {
-      const row = e.target.closest('[data-product-id]');
-      if (row) row.style.borderTop = '';
-    });
-
-    tbody.addEventListener('drop', async e => {
-      e.preventDefault();
+    const handleSave = async () => {
       if (!draggedRow || !draggedOverRow) return;
 
       const rows = Array.from(tbody.querySelectorAll('[data-product-id]'));
@@ -525,8 +510,7 @@ const ProductsListView = {
       const targetIdx = rows.indexOf(draggedOverRow);
 
       if (draggedIdx === targetIdx) {
-        draggedRow.style.opacity = '1';
-        draggedOverRow.style.borderTop = '';
+        handleDragEnd();
         return;
       }
 
@@ -544,10 +528,7 @@ const ProductsListView = {
         display_order: idx,
       }));
 
-      draggedRow.style.opacity = '1';
-      draggedOverRow.style.borderTop = '';
-      draggedRow = null;
-      draggedOverRow = null;
+      handleDragEnd();
 
       // Save to API
       try {
@@ -557,7 +538,79 @@ const ProductsListView = {
         Toast.error(`Failed to save order: ${err.message}`);
         this._load();
       }
+    };
+
+    // Desktop drag-and-drop
+    tbody.addEventListener('dragstart', e => {
+      const row = e.target.closest('[data-product-id]');
+      if (!row) return;
+      handleDragStart(row);
+      e.dataTransfer.effectAllowed = 'move';
     });
+
+    tbody.addEventListener('dragend', handleDragEnd);
+
+    tbody.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const row = e.target.closest('[data-product-id]');
+      if (!row || row === draggedRow) {
+        if (draggedOverRow) draggedOverRow.style.borderTop = '';
+        draggedOverRow = null;
+        return;
+      }
+      if (draggedOverRow && draggedOverRow !== row) {
+        draggedOverRow.style.borderTop = '';
+      }
+      draggedOverRow = row;
+      if (draggedRow && draggedOverRow) {
+        draggedOverRow.style.borderTop = '2px solid var(--bs-success)';
+      }
+    });
+
+    tbody.addEventListener('dragleave', e => {
+      const row = e.target.closest('[data-product-id]');
+      if (row && row === draggedOverRow) {
+        row.style.borderTop = '';
+        draggedOverRow = null;
+      }
+    });
+
+    tbody.addEventListener('drop', handleSave);
+
+    // Touch support for mobile
+    tbody.addEventListener('touchstart', e => {
+      const row = e.target.closest('[data-product-id]');
+      if (!row) return;
+      touchStartY = e.touches[0].clientY;
+      handleDragStart(row);
+    }, false);
+
+    tbody.addEventListener('touchmove', e => {
+      if (!draggedRow) return;
+      e.preventDefault();
+      const touchY = e.touches[0].clientY;
+      const rows = Array.from(tbody.querySelectorAll('[data-product-id]'));
+
+      for (const row of rows) {
+        const rect = row.getBoundingClientRect();
+        const rowMidpoint = rect.top + rect.height / 2;
+
+        if (touchY >= rect.top && touchY < rowMidpoint && row !== draggedRow) {
+          if (draggedOverRow) draggedOverRow.style.borderTop = '';
+          draggedOverRow = row;
+          draggedOverRow.style.borderTop = '2px solid var(--bs-success)';
+          break;
+        } else if (touchY >= rowMidpoint && touchY < rect.bottom && row !== draggedRow) {
+          if (draggedOverRow) draggedOverRow.style.borderTop = '';
+          draggedOverRow = row;
+          draggedOverRow.style.borderTop = '2px solid var(--bs-success)';
+          break;
+        }
+      }
+    }, false);
+
+    tbody.addEventListener('touchend', handleSave, false);
 
     await this._load();
   },
