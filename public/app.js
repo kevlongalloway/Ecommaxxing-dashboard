@@ -348,8 +348,9 @@ const ProductsListView = {
   _offset:     0,
   _limit:      50,
   _filter:    'all',
-  _products:   [],
-  _dragSrcIdx: -1,
+  _products:    [],
+  _dragSrcIdx:  -1,
+  _touchState:  null,
 
   render() {
     return `
@@ -521,6 +522,62 @@ const ProductsListView = {
       this._renderRows(reordered, this._filter === 'inactive');
       this._saveReorder(reordered);
     });
+
+    // Touch drag-and-drop for mobile
+    tbody.addEventListener('touchstart', e => {
+      if (!e.target.closest('.drag-handle')) return;
+      e.preventDefault();
+      const row = e.target.closest('tr[data-index]');
+      if (!row) return;
+      const touch = e.touches[0];
+      const rect = row.getBoundingClientRect();
+      const ghost = document.createElement('table');
+      ghost.className = 'table table-dark mb-0';
+      ghost.style.cssText = `position:fixed;pointer-events:none;z-index:9999;opacity:0.9;width:${rect.width}px;top:${rect.top}px;left:${rect.left}px;margin:0;box-shadow:0 8px 24px rgba(0,0,0,0.6);background:var(--bg-card);border-radius:4px;`;
+      const gtb = document.createElement('tbody');
+      gtb.appendChild(row.cloneNode(true));
+      ghost.appendChild(gtb);
+      document.body.appendChild(ghost);
+      row.classList.add('dragging');
+      this._touchState = { srcIdx: +row.dataset.index, ghost, offsetY: touch.clientY - rect.top, destIdx: null };
+    }, { passive: false });
+
+    tbody.addEventListener('touchmove', e => {
+      if (!this._touchState) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      const { ghost, offsetY } = this._touchState;
+      ghost.style.top = `${touch.clientY - offsetY}px`;
+      ghost.style.visibility = 'hidden';
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      ghost.style.visibility = '';
+      const targetRow = el?.closest('#products-tbody tr[data-index]');
+      tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
+      if (targetRow && +targetRow.dataset.index !== this._touchState.srcIdx) {
+        targetRow.classList.add('drag-over');
+        this._touchState.destIdx = +targetRow.dataset.index;
+      } else {
+        this._touchState.destIdx = null;
+      }
+    }, { passive: false });
+
+    const _finishTouch = () => {
+      if (!this._touchState) return;
+      const { srcIdx, ghost, destIdx } = this._touchState;
+      ghost.remove();
+      tbody.querySelectorAll('tr').forEach(r => r.classList.remove('dragging', 'drag-over'));
+      this._touchState = null;
+      if (destIdx !== null && destIdx !== srcIdx) {
+        const reordered = [...this._products];
+        const [moved] = reordered.splice(srcIdx, 1);
+        reordered.splice(destIdx, 0, moved);
+        this._products = reordered;
+        this._renderRows(reordered, this._filter === 'inactive');
+        this._saveReorder(reordered);
+      }
+    };
+    tbody.addEventListener('touchend', _finishTouch);
+    tbody.addEventListener('touchcancel', _finishTouch);
 
     await this._load();
   },

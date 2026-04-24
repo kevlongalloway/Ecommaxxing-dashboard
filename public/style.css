@@ -374,10 +374,19 @@ textarea.form-control {
   cursor: grab;
   font-size: 1rem;
   transition: color 0.15s;
+  padding: 0.5rem;
+  touch-action: none;
 }
 
 tr:hover .drag-handle {
   color: var(--text-dim);
+}
+
+@media (max-width: 767px) {
+  .drag-handle {
+    font-size: 1.2rem;
+    padding: 0.75rem 0.5rem;
+  }
 }
 
 tr.dragging {
